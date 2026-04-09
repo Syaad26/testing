@@ -367,6 +367,19 @@ function renderModalContent() {
           <div class="stock-display" id="modal-stok-val">${selectedPtr.stok}</div>
           <button class="btn-qty" onclick="handleStepStok(1)">+</button>
         </div>
+
+        <div style="display:flex; gap:8px; margin-top:12px; justify-content:center; align-items:center;">
+          <input
+            id="modal-stok-input"
+            type="number"
+            min="0"
+            value="${selectedPtr.stok}"
+            placeholder="Input stok"
+            onkeydown="if(event.key==='Enter'){applyManualStok()}"
+            style="width:120px; padding:10px 12px; border:1px solid #d8d3c8; border-radius:10px; font-weight:700; text-align:center;"
+          />
+          <button class="action-btn" style="padding:10px 14px;" onclick="applyManualStok()">Simpan</button>
+        </div>
       </div>
 
       <button class="btn-primary" 
@@ -402,6 +415,39 @@ async function handleStepStok(delta) {
     render(); // Update tabel di background
   } catch (error) {
     console.error("Gagal update stok:", error);
+  }
+}
+
+async function applyManualStok() {
+  if (!selectedPtr) return;
+
+  const input = document.getElementById("modal-stok-input");
+  if (!input) return;
+
+  const newStok = parseInt(input.value, 10);
+  if (isNaN(newStok) || newStok < 0) {
+    showToast("Masukkan stok valid (>= 0)");
+    input.focus();
+    return;
+  }
+
+  if (newStok === selectedPtr.stok) {
+    showToast("Stok tidak berubah");
+    return;
+  }
+
+  try {
+    const updated = await updateBookStok(selectedPtr._id, newStok);
+    selectedPtr.stok = updated.stok;
+
+    const display = document.getElementById("modal-stok-val");
+    if (display) display.textContent = selectedPtr.stok;
+    input.value = selectedPtr.stok;
+
+    showToast(`Stok berhasil diubah: ${selectedPtr.stok}`);
+    render();
+  } catch (error) {
+    console.error("Gagal update stok manual:", error);
   }
 }
 
