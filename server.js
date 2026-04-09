@@ -286,3 +286,5 @@ process.on("SIGINT", async () => {
   await mongoClient.close();
   process.exit(0);
 });
+
+// trigger redeploy

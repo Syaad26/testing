@@ -265,13 +265,13 @@ async function hapusBuku() {
   if (!selectedPtr) return;
 
   const targetId = selectedPtr._id;
-  if (!confirm(`Hapus "${selectedPtr.judul}"? ID akan dirapatkan.`)) return;
+  if (!confirm(`Hapus "${selectedPtr.judul}"? ID akan disusun ulang.`)) return;
 
   try {
-    // 1. Filter data lokal
+    // 1. Filter lokal
     const filtered = inventaris.filter((b) => b._id !== targetId);
 
-    // 2. Re-indexing (Susun ulang ID & Alamat)
+    // 2. Re-indexing
     const sanitizedData = filtered.map((buku, index) => ({
       _id: index + 1,
       judul: buku.judul,
@@ -281,10 +281,11 @@ async function hapusBuku() {
       addr: getAddr(index),
     }));
 
-    // 3. HANYA panggil sync (Hapus deleteBook terpisah)
+    // 3. Panggil sync - PERHATIKAN DISINI
+    // Kita panggil /books/sync karena di api.js API_URL sudah ada "/api"
     await apiCall("/books/sync", "POST", { data: sanitizedData });
 
-    // 4. Update memory
+    // 4. Update state
     inventaris = sanitizedData;
     idCounter = inventaris.length + 1;
     selectedPtr = null;
@@ -293,8 +294,9 @@ async function hapusBuku() {
     render();
     showToast("Berhasil disinkronkan!");
   } catch (error) {
-    console.error("Sync failed:", error);
-    showToast("Gagal! Pastikan server sudah restart.");
+    // Jika masih gagal, kita log error aslinya ke console
+    console.error("Gagal Sync:", error);
+    showToast("Kesalahan Sinkronisasi! Cek Railway Logs.");
   }
 }
 
