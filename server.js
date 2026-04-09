@@ -15,7 +15,7 @@ let booksCollection;
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "20mb" }));
 app.use(express.static("./"));
 
 // ============================================================
@@ -251,15 +251,20 @@ async function start() {
   app.post("/api/books/sync", async (req, res) => {
     try {
       const { data } = req.body;
-      // Hapus total tanpa ampun
+      console.log("Memulai Sinkronisasi...");
+
+      // 1. Hapus SEMUA data secara total
       await booksCollection.deleteMany({});
 
-      // Isi ulang hanya jika ada data (mencegah error insertMany kosong)
+      // 2. Masukkan data baru HANYA jika array tidak kosong
       if (data && data.length > 0) {
         await booksCollection.insertMany(data);
       }
+
+      console.log("Sinkronisasi Berhasil!");
       res.json({ message: "Sync Berhasil" });
     } catch (error) {
+      console.error("Kesalahan Server:", error.message);
       res.status(500).json({ error: error.message });
     }
   });

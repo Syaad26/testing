@@ -260,54 +260,41 @@ async function updateStok() {
 // ============================================================
 //  hapusBuku() — menggeser array, update pointer
 // ============================================================
+// [index.js] - Ganti fungsi hapusBuku
 async function hapusBuku() {
   if (!selectedPtr) return;
 
   const targetId = selectedPtr._id;
-  if (
-    !confirm(
-      `Hapus buku "${selectedPtr.judul}"? ID akan disusun ulang secara otomatis.`,
-    )
-  )
-    return;
+  if (!confirm(`Hapus "${selectedPtr.judul}"? ID akan dirapatkan.`)) return;
 
   try {
-    // 1. Filter data di memori lokal (Frontend) terlebih dahulu
-    const sisaBuku = inventaris.filter((b) => b._id !== targetId);
+    // 1. Filter data lokal
+    const filtered = inventaris.filter((b) => b._id !== targetId);
 
-    // 2. Re-indexing: Susun ulang ID agar rapat (1, 2, 3...)
-    const sanitizedData = sisaBuku.map((buku, index) => {
-      return {
-        _id: index + 1, // ID baru yang urut
-        judul: buku.judul,
-        pengarang: buku.pengarang,
-        stok: buku.stok,
-        cover: buku.cover || "",
-        // Alamat memori juga diurutkan kembali (simulasi pointer)
-        addr: getAddr(index),
-      };
-    });
+    // 2. Re-indexing (Susun ulang ID & Alamat)
+    const sanitizedData = filtered.map((buku, index) => ({
+      _id: index + 1,
+      judul: buku.judul,
+      pengarang: buku.pengarang,
+      stok: buku.stok,
+      cover: buku.cover || "",
+      addr: getAddr(index),
+    }));
 
-    // 3. Sinkronisasi TOTAL ke Database
-    // Kita panggil endpoint /sync yang menghapus semua isi DB lalu mengisinya dengan sanitizedData
-    log(`<span class="log-info">// Menyinkronkan ulang database...</span>`);
+    // 3. HANYA panggil sync (Hapus deleteBook terpisah)
     await apiCall("/books/sync", "POST", { data: sanitizedData });
 
-    // 4. Update State Lokal
+    // 4. Update memory
     inventaris = sanitizedData;
     idCounter = inventaris.length + 1;
     selectedPtr = null;
 
-    // 5. Update UI
     closeModal();
     render();
-    showToast("Berhasil dihapus & ID dirapatkan!");
-    log(
-      `<span class="log-info">// Sinkronisasi sukses. Total buku: ${inventaris.length}</span>`,
-    );
+    showToast("Berhasil disinkronkan!");
   } catch (error) {
-    console.error("Detail Error Sinkronisasi:", error);
-    showToast("Kesalahan Sinkronisasi! Cek koneksi server.");
+    console.error("Sync failed:", error);
+    showToast("Gagal! Pastikan server sudah restart.");
   }
 }
 
