@@ -63,13 +63,8 @@ async function getBook(id) {
 }
 
 // POST tambah buku
-async function addBook(judul, pengarang, stok, cover = "") {
-  return apiCall("/books", "POST", { judul, pengarang, stok, cover });
-}
-
-// PUT update stok
-async function updateBookStok(id, stok) {
-  return apiCall(`/books/${id}/stok`, "PUT", { stok });
+async function addBook(judul, pengarang, sinopsis, cover = "") {
+  return apiCall("/books", "POST", { judul, pengarang, sinopsis, cover });
 }
 
 // DELETE hapus buku
@@ -85,4 +80,43 @@ async function getStats() {
 // SEED data
 async function seedData() {
   return apiCall("/seed", "POST");
+}
+
+// Upload ebook untuk book tertentu
+async function uploadEbook(bookId, fileInput) {
+  if (!fileInput || !fileInput.files || !fileInput.files[0]) {
+    throw new Error("Tidak ada file dipilih");
+  }
+
+  const formData = new FormData();
+  formData.append("file", fileInput.files[0]);
+
+  try {
+    const response = await fetch(`${API_URL}/books/${bookId}/ebook`, {
+      method: "POST",
+      body: formData,
+      // JANGAN set Content-Type header, browser otomatis set multipart/form-data
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Upload ebook gagal");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`Upload Error (book ${bookId}):`, error.message);
+    showToast(`Error: ${error.message}`);
+    throw error;
+  }
+}
+
+// Download ebook
+function downloadEbook(bookId, fileName = "ebook") {
+  const link = document.createElement("a");
+  link.href = `${API_URL}/books/${bookId}/download`;
+  link.download = fileName || "ebook";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }

@@ -161,46 +161,48 @@ function removeCoverPreview(event) {
 //  tambahBuku() — setara void tambahBuku(Buku*, int* jumlah)
 // ============================================================
 async function tambahBuku() {
-  const judul = document.getElementById("f-judul").value;
-  const pengarang = document.getElementById("f-pengarang").value;
-  const stok = parseInt(document.getElementById("f-stok").value);
+  const judul = document.getElementById("f-judul").value.trim();
+  const pengarang = document.getElementById("f-pengarang").value.trim();
+  const sinopsis = document.getElementById("f-sinopsis").value.trim();
+  const ebookInput = document.getElementById("f-ebook");
 
-  if (!judul || !pengarang) {
-    showToast("Isi data dengan lengkap!");
+  if (!judul || !pengarang || !sinopsis) {
+    showToast("Judul, pengarang, dan sinopsis wajib diisi!");
     return;
   }
 
-  // FORCE ID: Selalu gunakan urutan berikutnya dari jumlah buku yang ada
-  const nextId = inventaris.length + 1;
+  if (!pendingCoverBase64) {
+    showToast("Upload cover dulu!");
+    return;
+  }
+
+  if (!ebookInput || !ebookInput.files || !ebookInput.files[0]) {
+    showToast("Upload file ebook dulu!");
+    return;
+  }
 
   try {
-    const newBook = await apiCall("/books", "POST", {
-      _id: nextId, // Kirim ID yang sudah kita tentukan secara urut
+    const newBook = await addBook(
       judul,
       pengarang,
-      stok,
-      cover: pendingCoverBase64 || "",
-    });
+      sinopsis,
+      pendingCoverBase64,
+    );
+    await uploadEbook(newBook._id, ebookInput);
 
-    // Update alamat memori simulasi
-    newBook.addr = getAddr(inventaris.length);
-    inventaris.push(newBook);
-
-    // Sinkronkan kembali idCounter
-    idCounter = inventaris.length + 1;
+    await loadBooks();
 
     // Reset UI
     document.getElementById("f-judul").value = "";
     document.getElementById("f-pengarang").value = "";
-    pendingCoverBase64 = null;
+    document.getElementById("f-sinopsis").value = "";
+    ebookInput.value = "";
+    removeCoverPreview();
 
-    render();
-    showToast(`Buku #${nextId} berhasil ditambahkan!`);
+    showToast("Buku berhasil ditambahkan!");
   } catch (error) {
     console.error("Gagal menambah buku:", error);
-    // Jika gagal karena ID duplikat di DB, paksa sync
-    showToast("Gagal! Mencoba sinkronisasi ulang...");
-    loadBooks();
+    showToast("Gagal menambah buku");
   }
 }
 
@@ -226,37 +228,6 @@ function cariBuku(id) {
   return null;
 }
 
-// ============================================================
-//  updateStok() — void updateStok(Buku* buku, int stokBaru)
-// ============================================================
-async function updateStok() {
-  if (!selectedPtr) return;
-  const val = parseInt(document.getElementById("edit-stok").value);
-  if (isNaN(val) || val < 0) {
-    showToast("Stok tidak valid");
-    return;
-  }
-
-  try {
-    const old = selectedPtr.stok;
-    const updated = await updateBookStok(selectedPtr._id, val);
-    selectedPtr.stok = updated.stok;
-
-    log(
-      `<span class="log-op">updateStok()</span> <span class="log-ptr">buku-&gt;stok</span> <span class="log-info">@ <span class="log-addr">${selectedPtr.addr}</span></span>`,
-    );
-    log(
-      `<span class="log-info">  ${old}</span> <span class="log-op">→</span> <span class="log-val">${updated.stok}</span>`,
-    );
-
-    render();
-    selectBuku(selectedPtr._id);
-    showToast("Stok diperbarui ✓");
-  } catch (error) {
-    console.error("Error updating book:", error);
-  }
-}
-
 function isDenseSequentialIds(books) {
   const sorted = [...books].sort((a, b) => a._id - b._id);
   return sorted.every((book, index) => book._id === index + 1);
@@ -278,8 +249,12 @@ async function normalizeIdsViaCrud() {
       {
         judul: book.judul,
         pengarang: book.pengarang,
-        stok: book.stok,
+        sinopsis: book.sinopsis || "",
         cover: book.cover || "",
+        ebookPath: book.ebookPath || "",
+        ebookName: book.ebookName || "",
+        ebookSize: book.ebookSize || 0,
+        ebookUploadedAt: book.ebookUploadedAt || null,
       },
       { silentError: true },
     );
@@ -345,6 +320,9 @@ function renderModalContent() {
       ? selectedPtr.cover
       : "https://via.placeholder.com/150x200?text=No+Cover";
 
+  const sinopsisText = selectedPtr.sinopsis || "Sinopsis belum tersedia.";
+  const hasEbook = Boolean(selectedPtr.ebookPath);
+
   container.innerHTML = `
     <div style="text-align: center;">
       <img src="${coverSrc}" class="modal-cover-preview" alt="Cover Buku">
@@ -357,30 +335,16 @@ function renderModalContent() {
       
       <div class="divider"></div>
 
-      <div style="margin-top: 20px;">
-        <label style="font-weight: bold; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted);">
-          Manajemen Stok
-        </label>
-        
-        <div class="stock-control-wrapper">
-          <button class="btn-qty" onclick="handleStepStok(-1)">−</button>
-          <div class="stock-display" id="modal-stok-val">${selectedPtr.stok}</div>
-          <button class="btn-qty" onclick="handleStepStok(1)">+</button>
-        </div>
-
-        <div style="display:flex; gap:8px; margin-top:12px; justify-content:center; align-items:center;">
-          <input
-            id="modal-stok-input"
-            type="number"
-            min="0"
-            value="${selectedPtr.stok}"
-            placeholder="Input stok"
-            onkeydown="if(event.key==='Enter'){applyManualStok()}"
-            style="width:120px; padding:10px 12px; border:1px solid #d8d3c8; border-radius:10px; font-weight:700; text-align:center;"
-          />
-          <button class="action-btn" style="padding:10px 14px;" onclick="applyManualStok()">Simpan</button>
-        </div>
+      <div style="margin-top: 18px; text-align: left; background: #f7f3ea; border: 1px solid #e2dccf; border-radius: 10px; padding: 12px;">
+        <div style="font-size: 0.72rem; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px;">Sinopsis</div>
+        <p style="line-height: 1.55; color: var(--ink); font-size: 0.92rem;">${sinopsisText}</p>
       </div>
+
+      ${
+        hasEbook
+          ? `<button class="btn-primary" style="width: 100%; margin-top: 14px;" onclick="downloadEbook(${selectedPtr._id})">⬇ Download Ebook</button>`
+          : `<div style="margin-top: 14px; border: 1px dashed #d6cdbb; border-radius: 8px; padding: 10px; color: var(--muted); font-size: 0.86rem;">File ebook belum tersedia</div>`
+      }
 
       <button class="btn-primary" 
               style="background: transparent; color: #c0392b; border: 1px solid #c0392b; width: 100%; margin-top: 30px; font-size: 0.8rem;" 
@@ -389,93 +353,6 @@ function renderModalContent() {
       </button>
     </div>
   `;
-}
-
-// --- Fungsi Handler untuk menjembatani UI dan api.js ---
-async function handleStepStok(delta) {
-  if (!selectedPtr) return;
-
-  const newStok = Math.max(0, selectedPtr.stok + delta);
-
-  // Jika tidak ada perubahan, tidak perlu panggil API
-  if (newStok === selectedPtr.stok) return;
-
-  try {
-    // MEMANGGIL FUNGSI ASLI KAMU: updateBookStok(id, stok)
-    const updated = await updateBookStok(selectedPtr._id, newStok);
-
-    // Update data di memory lokal (pointer)
-    selectedPtr.stok = updated.stok;
-
-    // Update angka di layar modal secara langsung (instan)
-    const display = document.getElementById("modal-stok-val");
-    if (display) display.textContent = selectedPtr.stok;
-
-    showToast(`Stok berhasil diubah: ${selectedPtr.stok}`);
-    render(); // Update tabel di background
-  } catch (error) {
-    console.error("Gagal update stok:", error);
-  }
-}
-
-async function applyManualStok() {
-  if (!selectedPtr) return;
-
-  const input = document.getElementById("modal-stok-input");
-  if (!input) return;
-
-  const newStok = parseInt(input.value, 10);
-  if (isNaN(newStok) || newStok < 0) {
-    showToast("Masukkan stok valid (>= 0)");
-    input.focus();
-    return;
-  }
-
-  if (newStok === selectedPtr.stok) {
-    showToast("Stok tidak berubah");
-    return;
-  }
-
-  try {
-    const updated = await updateBookStok(selectedPtr._id, newStok);
-    selectedPtr.stok = updated.stok;
-
-    const display = document.getElementById("modal-stok-val");
-    if (display) display.textContent = selectedPtr.stok;
-    input.value = selectedPtr.stok;
-
-    showToast(`Stok berhasil diubah: ${selectedPtr.stok}`);
-    render();
-  } catch (error) {
-    console.error("Gagal update stok manual:", error);
-  }
-}
-
-// Fungsi internal untuk menangani klik tombol + / -
-async function handleUpdateStok(delta) {
-  if (!selectedPtr) return;
-
-  const newStok = Math.max(0, selectedPtr.stok + delta);
-
-  // Jika stok tidak berubah (misal sudah 0 lalu dikurang), jangan panggil API
-  if (newStok === selectedPtr.stok) return;
-
-  try {
-    // Memanggil fungsi updateBookStok sesuai yang ada di api.js
-    const updated = await updateBookStok(selectedPtr._id, newStok);
-
-    // Update data di pointer lokal
-    selectedPtr.stok = updated.stok;
-
-    // Update tampilan UI modal secara instan
-    const display = document.getElementById("modal-stok-val");
-    if (display) display.textContent = selectedPtr.stok;
-
-    showToast(`Stok diperbarui menjadi ${selectedPtr.stok}`);
-    render(); // Refresh tabel di background
-  } catch (error) {
-    console.error("Gagal update stok:", error);
-  }
 }
 
 // Fungsi Kontrol Modal
@@ -513,7 +390,8 @@ function render() {
   const filtered = inventaris.filter(
     (b) =>
       b.judul.toLowerCase().includes(query) ||
-      b.pengarang.toLowerCase().includes(query),
+      b.pengarang.toLowerCase().includes(query) ||
+      (b.sinopsis || "").toLowerCase().includes(query),
   );
 
   if (filtered.length === 0) {
@@ -522,11 +400,8 @@ function render() {
   } else {
     list.innerHTML = filtered
       .map((b) => {
-        const realIdx = inventaris.indexOf(b);
-        const addr = getAddr(realIdx);
-        const stokClass =
-          b.stok === 0 ? "stok-empty" : b.stok <= 3 ? "stok-low" : "stok-ok";
         const isSelected = selectedPtr && selectedPtr._id === b._id;
+        const ptrAddr = b.addr || getAddr(inventaris.indexOf(b));
 
         const coverCell = b.cover
           ? `<img src="${b.cover}" class="cover-thumb" alt="cover" onerror="this.style.display='none';this.nextSibling.style.display='flex'" style="background:#f0f0f0;border-radius:4px;" />
@@ -541,20 +416,14 @@ function render() {
             <div class="book-title">${b.judul}</div>
             <div class="book-author">${b.pengarang}</div>
           </div>
-          <span class="ptr-badge col-addr ${isSelected ? "green" : ""}">${addr}</span>
-          <span class="stok-badge ${stokClass}">${b.stok}</span>
-          <button class="action-btn" onclick="event.stopPropagation();selectBuku(${b._id})">Edit</button>
+          <span class="ptr-badge col-addr ${isSelected ? "green" : ""}">${ptrAddr}</span>
+          <button class="action-btn" onclick="event.stopPropagation();selectBuku(${b._id})">Detail</button>
         </div>`;
       })
       .join("");
   }
 
-  // Update header stats
-  const totalStok = inventaris.reduce((s, b) => s + b.stok, 0);
-  const lowCount = inventaris.filter((b) => b.stok <= 3).length;
   document.getElementById("total-buku").textContent = inventaris.length;
-  document.getElementById("total-stok").textContent = totalStok;
-  document.getElementById("stok-low-count").textContent = lowCount;
 }
 
 // ── SEARCH listener ──
@@ -576,6 +445,10 @@ async function loadBooks() {
       // 2. Petakan data dan berikan alamat memori simulasi (addr)
       inventaris = books.map((b, i) => ({
         ...b,
+        sinopsis: b.sinopsis || "",
+        ebookPath: b.ebookPath || "",
+        ebookName: b.ebookName || "",
+        ebookSize: b.ebookSize || 0,
         addr: getAddr(i),
       }));
 

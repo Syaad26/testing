@@ -23,14 +23,6 @@
           <span class="stat-num" id="total-buku">0</span>
           <span class="stat-label">Total Judul</span>
         </div>
-        <div class="stat">
-          <span class="stat-num" id="total-stok">0</span>
-          <span class="stat-label">Total Stok</span>
-        </div>
-        <div class="stat">
-          <span class="stat-num" id="stok-low-count">0</span>
-          <span class="stat-label">Stok Kritis</span>
-        </div>
       </div>
     </header>
 
@@ -66,8 +58,7 @@
             <span class="th">ID</span>
             <span class="th th-cover">Cover</span>
             <span class="th">Judul &amp; Pengarang</span>
-            <span class="th th-hide-sm">Pointer Addr</span>
-            <span class="th">Stok</span>
+            <span class="th th-hide-sm">Addr</span>
             <span class="th">Aksi</span>
           </div>
           <div id="book-list"></div>
@@ -118,14 +109,21 @@
             />
           </div>
           <div class="form-group">
-            <label class="form-label">Stok Awal</label>
+            <label class="form-label">Sinopsis</label>
+            <textarea
+              class="form-input"
+              id="f-sinopsis"
+              rows="4"
+              placeholder="Ringkasan cerita / isi buku..."
+            ></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">File Ebook</label>
             <input
               class="form-input"
-              id="f-stok"
-              type="number"
-              min="0"
-              placeholder="0"
-              value="5"
+              id="f-ebook"
+              type="file"
+              accept=".pdf,.epub,.mobi,.txt,.zip"
             />
           </div>
           <button class="btn-primary" onclick="tambahBuku()">
