@@ -533,12 +533,6 @@ async function loadBooks() {
   render();
 }
 
-// Pastikan fungsi ini dipanggil saat halaman selesai dimuat
-document.addEventListener("DOMContentLoaded", () => {
-  hideSplash();
-  loadBooks(); // <-- Pemanggilan fungsi di sini
-});
-
 // ── SIDE PANEL TOGGLE ──
 function toggleSidePanel() {
   const sidePanel = document.querySelector(".side-panel");
@@ -555,11 +549,19 @@ function toggleSidePanel() {
 }
 
 // Load books when page loads
+// Cukup satu blok DOMContentLoaded saja
+// Hapus semua baris dari "document.addEventListener" sampai paling bawah,
+// lalu ganti dengan ini:
+
 document.addEventListener("DOMContentLoaded", () => {
   hideSplash();
   loadBooks();
 
-  // Close side panel by default
-  document.querySelector(".side-panel").classList.remove("open");
-  document.getElementById("toggle-side").textContent = "☰";
+  // Setup listener untuk menutup modal jika area luar (overlay) diklik
+  const modal = document.getElementById("edit-modal");
+  if (modal) {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) closeModal();
+    });
+  }
 });
