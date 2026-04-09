@@ -7,7 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI =
   process.env.MONGODB_URI ||
-  "mongodb+srv://225443018_db_user:Polmansyad@cluster0.yns6u6f.mongodb.net/?appName=Cluster0";
+  "mongodb+srv://syaad:Polmansyad@projectstrukdat.ivd89po.mongodb.net/?appName=projectstrukdat";
 const DB_NAME = process.env.DB_NAME || "book_inventary";
 
 let db;
