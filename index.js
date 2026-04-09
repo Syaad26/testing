@@ -161,65 +161,44 @@ function removeCoverPreview(event) {
 //  tambahBuku() — setara void tambahBuku(Buku*, int* jumlah)
 // ============================================================
 async function tambahBuku() {
-  const judul = document.getElementById("f-judul").value.trim();
-  const pengarang = document.getElementById("f-pengarang").value.trim();
-  const stok = parseInt(document.getElementById("f-stok").value) || 0;
+  const judul = document.getElementById("f-judul").value;
+  const pengarang = document.getElementById("f-pengarang").value;
+  const stok = parseInt(document.getElementById("f-stok").value);
 
   if (!judul || !pengarang) {
-    showToast("Isi judul & pengarang dulu!");
+    showToast("Isi data dengan lengkap!");
     return;
   }
 
-  // WAJIB ada cover
-  if (!pendingCoverBase64) {
-    showToast("Cover gambar WAJIB diisi!");
-    return;
-  }
-
-  const coverToSend =
-    pendingCoverBase64.length < 500000 ? pendingCoverBase64 : null;
+  // Pastikan idCounter sinkron sebelum menambah
+  idCounter = inventaris.length + 1;
 
   try {
-    const buku = await addBook(judul, pengarang, stok, coverToSend);
+    // Kirim ID manual ke API agar database sinkron dengan urutan frontend
+    const newBook = await apiCall("/books", "POST", {
+      _id: idCounter,
+      judul,
+      pengarang,
+      stok,
+      cover: pendingCoverBase64 || "",
+    });
 
-    // Fix server tidak return cover: pakai local preview jika server skip + save ke localStorage
-    if (coverToSend && (!buku.cover || buku.cover === null)) {
-      buku.cover = coverToSend;
-      const savedCovers = JSON.parse(
-        localStorage.getItem("libraryos_covers") || "{}",
-      );
-      savedCovers[buku._id] = coverToSend;
-      localStorage.setItem("libraryos_covers", JSON.stringify(savedCovers));
-      console.log("Server skip cover, saved local base64");
-    }
+    // Masukkan ke array lokal
+    newBook.addr = getAddr(inventaris.length);
+    inventaris.push(newBook);
 
-    inventaris.push(buku);
+    // Naikkan counter untuk buku selanjutnya
+    idCounter++;
 
-    const idx = inventaris.length - 1;
-    const addr = getAddr(idx);
-    log(
-      `<span class="log-op">tambahBuku()</span>  <span class="log-info">jumlah = ${idx} → ${idx + 1}</span>`,
-    );
-    log(
-      `<span class="log-ptr">Buku*</span> inventaris[${idx}] <span class="log-info">allocated at</span> <span class="log-addr">${buku.addr || addr}</span>`,
-    );
-    log(
-      `<span class="log-info">  ._id=${buku._id}  .stok=${buku.stok} ${coverToSend ? "(+cover)" : ""}</span>`,
-    );
-
-    // Reset form
+    // Reset Form
     document.getElementById("f-judul").value = "";
     document.getElementById("f-pengarang").value = "";
-    document.getElementById("f-stok").value = "5";
-    removeCoverPreview({ stopPropagation: () => {} });
+    pendingCoverBase64 = null;
 
     render();
-    showToast(
-      `Buku ditambahkan ✓ ${coverToSend ? "(dengan cover)" : "(tanpa cover)"}`,
-    );
+    showToast("Buku berhasil ditambahkan!");
   } catch (error) {
-    console.error("Error adding book:", error);
-    showToast(`Error: ${error.message}. Coba tanpa cover?`);
+    console.error(error);
   }
 }
 
@@ -283,37 +262,32 @@ async function hapusBuku() {
   if (!selectedPtr) return;
 
   const targetId = selectedPtr._id;
-  const targetJudul = selectedPtr.judul;
-
-  if (!confirm(`Hapus buku "${targetJudul}" dari inventaris?`)) return;
+  if (!confirm(`Hapus buku "${selectedPtr.judul}"?`)) return;
 
   try {
-    // 1. Panggil API untuk hapus dari database
     await deleteBook(targetId);
 
-    // 2. Hapus dari array lokal
+    // 1. Filter array lokal
     inventaris = inventaris.filter((b) => b._id !== targetId);
 
-    // 3. RE-INDEXING: Atur ulang ID dan ADDR agar tetap urut
+    // 2. RE-INDEXING (Wajib agar ID tetap urut 1, 2, 3...)
     inventaris.forEach((buku, index) => {
-      buku._id = index + 1; // ID mulai dari 1 lagi
-      buku.addr = getAddr(index); // Update simulasi alamat memori
+      buku._id = index + 1; // ID diset ulang berdasarkan urutan array
+      buku.addr = getAddr(index); // Alamat memori juga diset ulang
     });
 
-    // 4. Update counter agar ID buku baru selanjutnya benar
+    // 3. UPDATE COUNTER (Kunci agar tambah buku tidak melompat ID-nya)
     idCounter = inventaris.length + 1;
 
     log(
-      `<span class="log-info">// Re-indexing complete. Array shifted.</span>`,
+      `<span class="log-info">// Re-indexing sukses. idCounter sekarang: ${idCounter}</span>`,
     );
-    showToast(`"${targetJudul}" dihapus & ID diupdate`);
 
-    // 5. Tutup modal dan refresh tampilan
     closeModal();
     render();
+    showToast("Buku dihapus & ID diurutkan ulang");
   } catch (error) {
-    console.error("Gagal menghapus:", error);
-    showToast("Gagal menghapus buku");
+    console.error(error);
   }
 }
 
