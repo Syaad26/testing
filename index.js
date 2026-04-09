@@ -238,9 +238,9 @@ async function updateStok() {
   }
 
   try {
-    const old = selectedPtr.ptr.stok;
-    const updated = await updateBookStok(selectedPtr.ptr._id, val);
-    selectedPtr.ptr.stok = updated.stok;
+    const old = selectedPtr.stok;
+    const updated = await updateBookStok(selectedPtr._id, val);
+    selectedPtr.stok = updated.stok;
 
     log(
       `<span class="log-op">updateStok()</span> <span class="log-ptr">buku-&gt;stok</span> <span class="log-info">@ <span class="log-addr">${selectedPtr.addr}</span></span>`,
@@ -250,7 +250,7 @@ async function updateStok() {
     );
 
     render();
-    selectBuku(selectedPtr.ptr._id);
+    selectBuku(selectedPtr._id);
     showToast("Stok diperbarui ✓");
   } catch (error) {
     console.error("Error updating book:", error);
@@ -266,6 +266,15 @@ async function hapusBuku() {
 
   const targetId = selectedPtr._id;
   if (!confirm(`Hapus "${selectedPtr.judul}"? ID akan disusun ulang.`)) return;
+
+  const fallbackDelete = async () => {
+    // Fallback: tetap hapus data walau endpoint sync belum tersedia di server hosting.
+    await deleteBook(targetId);
+    await loadBooks();
+    selectedPtr = null;
+    closeModal();
+    showToast("Buku dihapus (mode fallback tanpa sync ID)");
+  };
 
   try {
     // 1. Filter lokal
@@ -294,9 +303,13 @@ async function hapusBuku() {
     render();
     showToast("Berhasil disinkronkan!");
   } catch (error) {
-    // Jika masih gagal, kita log error aslinya ke console
-    console.error("Gagal Sync:", error);
-    showToast("Kesalahan Sinkronisasi! Cek Railway Logs.");
+    console.error("Gagal Sync, mencoba fallback delete:", error);
+    try {
+      await fallbackDelete();
+    } catch (fallbackError) {
+      console.error("Fallback delete gagal:", fallbackError);
+      showToast("Kesalahan sinkronisasi & delete. Cek server logs.");
+    }
   }
 }
 
@@ -462,7 +475,7 @@ function render() {
         const addr = getAddr(realIdx);
         const stokClass =
           b.stok === 0 ? "stok-empty" : b.stok <= 3 ? "stok-low" : "stok-ok";
-        const isSelected = selectedPtr && selectedPtr.ptr._id === b._id;
+        const isSelected = selectedPtr && selectedPtr._id === b._id;
 
         const coverCell = b.cover
           ? `<img src="${b.cover}" class="cover-thumb" alt="cover" onerror="this.style.display='none';this.nextSibling.style.display='flex'" style="background:#f0f0f0;border-radius:4px;" />
