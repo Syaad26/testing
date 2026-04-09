@@ -170,35 +170,37 @@ async function tambahBuku() {
     return;
   }
 
-  // Pastikan idCounter sinkron sebelum menambah
-  idCounter = inventaris.length + 1;
+  // FORCE ID: Selalu gunakan urutan berikutnya dari jumlah buku yang ada
+  const nextId = inventaris.length + 1;
 
   try {
-    // Kirim ID manual ke API agar database sinkron dengan urutan frontend
     const newBook = await apiCall("/books", "POST", {
-      _id: idCounter,
+      _id: nextId, // Kirim ID yang sudah kita tentukan secara urut
       judul,
       pengarang,
       stok,
       cover: pendingCoverBase64 || "",
     });
 
-    // Masukkan ke array lokal
+    // Update alamat memori simulasi
     newBook.addr = getAddr(inventaris.length);
     inventaris.push(newBook);
 
-    // Naikkan counter untuk buku selanjutnya
-    idCounter++;
+    // Sinkronkan kembali idCounter
+    idCounter = inventaris.length + 1;
 
-    // Reset Form
+    // Reset UI
     document.getElementById("f-judul").value = "";
     document.getElementById("f-pengarang").value = "";
     pendingCoverBase64 = null;
 
     render();
-    showToast("Buku berhasil ditambahkan!");
+    showToast(`Buku #${nextId} berhasil ditambahkan!`);
   } catch (error) {
-    console.error(error);
+    console.error("Gagal menambah buku:", error);
+    // Jika gagal karena ID duplikat di DB, paksa sync
+    showToast("Gagal! Mencoba sinkronisasi ulang...");
+    loadBooks();
   }
 }
 
@@ -262,32 +264,39 @@ async function hapusBuku() {
   if (!selectedPtr) return;
 
   const targetId = selectedPtr._id;
-  if (!confirm(`Hapus buku "${selectedPtr.judul}"?`)) return;
+  if (!confirm(`Hapus buku "${selectedPtr.judul}"? Semua ID akan dirapatkan.`))
+    return;
 
   try {
+    // 1. Hapus buku target dari DB
     await deleteBook(targetId);
 
-    // 1. Filter array lokal
-    inventaris = inventaris.filter((b) => b._id !== targetId);
+    // 2. Buat array baru tanpa buku tersebut
+    const filtered = inventaris.filter((b) => b._id !== targetId);
 
-    // 2. RE-INDEXING (Wajib agar ID tetap urut 1, 2, 3...)
-    inventaris.forEach((buku, index) => {
-      buku._id = index + 1; // ID diset ulang berdasarkan urutan array
-      buku.addr = getAddr(index); // Alamat memori juga diset ulang
+    // 3. RE-INDEXING LOKAL: Paksa ID jadi 1, 2, 3...
+    const sanitizedData = filtered.map((buku, index) => {
+      return {
+        ...buku,
+        _id: index + 1, // ID baru urut
+        addr: getAddr(index), // Alamat memori baru urut
+      };
     });
 
-    // 3. UPDATE COUNTER (Kunci agar tambah buku tidak melompat ID-nya)
-    idCounter = inventaris.length + 1;
+    // 4. SYNC KE SERVER: Timpa isi database dengan data yang sudah rapi
+    await apiCall("/books/sync", "POST", { data: sanitizedData });
 
-    log(
-      `<span class="log-info">// Re-indexing sukses. idCounter sekarang: ${idCounter}</span>`,
-    );
+    // 5. Update state aplikasi
+    inventaris = sanitizedData;
+    idCounter = inventaris.length + 1;
+    selectedPtr = null;
 
     closeModal();
     render();
-    showToast("Buku dihapus & ID diurutkan ulang");
+    showToast("Buku dihapus & ID dirapatkan kembali");
   } catch (error) {
-    console.error(error);
+    console.error("Gagal saat proses hapus/sync:", error);
+    showToast("Terjadi kesalahan sinkronisasi");
   }
 }
 
@@ -493,48 +502,42 @@ document.getElementById("search").addEventListener("input", () => {
 });
 
 // ── LOAD DATA FROM SERVER ──
+// [index.js]
 async function loadBooks() {
   try {
+    // 1. Ambil data dari API
     const books = await getAllBooks();
 
-    // Fix cover hilang setelah refresh: restore local preview untuk buku yang punya cover base64 di localStorage
-    const savedCovers = JSON.parse(
-      localStorage.getItem("libraryos_covers") || "{}",
-    );
-    books.forEach((buku) => {
-      if (!buku.cover && savedCovers[buku._id]) {
-        buku.cover = savedCovers[buku._id];
-      }
-    });
+    if (books && books.length > 0) {
+      // 2. Petakan data dan berikan alamat memori simulasi (addr)
+      inventaris = books.map((b, i) => ({
+        ...b,
+        addr: getAddr(i),
+      }));
 
-    inventaris = books;
-
-    if (books.length > 0) {
-      const numericIds = books
-        .map((b) => b._id)
-        .filter((id) => typeof id === "number" && Number.isFinite(id));
-      const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 0;
+      // 3. CARI ID TERTINGGI (Penting agar ID baru tidak duplikat/melompat)
+      const maxId = Math.max(...inventaris.map((b) => b._id));
       idCounter = maxId + 1;
 
       log('<span class="log-info">// inventaris[] loaded from MongoDB</span>');
-      log(
-        `<span class="log-ptr">Buku*</span> <span class="log-info">base addr =</span> <span class="log-addr">0x${addrBase.toString(16).toUpperCase()}</span>`,
-      );
-      log(`<span class="log-info">// ${books.length} documents found</span>`);
     } else {
-      log(
-        '<span class="log-info">// inventaris[] is empty — tambahkan buku baru atau jalankan seedData()</span>',
-      );
+      inventaris = [];
+      idCounter = 1; // Jika kosong, mulai dari ID 1
+      log('<span class="log-info">// Database kosong</span>');
     }
   } catch (error) {
-    console.error("Error loading books:", error);
-    log(
-      '<span class="log-info">// Failed to load from MongoDB, check server connection</span>',
-    );
+    console.error("Gagal memuat buku:", error);
   }
 
+  // 4. Update tampilan tabel
   render();
 }
+
+// Pastikan fungsi ini dipanggil saat halaman selesai dimuat
+document.addEventListener("DOMContentLoaded", () => {
+  hideSplash();
+  loadBooks(); // <-- Pemanggilan fungsi di sini
+});
 
 // ── SIDE PANEL TOGGLE ──
 function toggleSidePanel() {

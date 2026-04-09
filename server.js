@@ -247,6 +247,25 @@ app.post("/api/seed", async (req, res) => {
 async function start() {
   await connectDB();
 
+  // Endpoint untuk sinkronisasi ulang seluruh ID
+  app.post("/api/books/sync", async (req, res) => {
+    try {
+      const { data } = req.body;
+
+      // 1. Hapus SEMUA data lama
+      await booksCollection.deleteMany({});
+
+      // 2. Masukkan SEMUA data baru yang ID-nya sudah urut
+      if (data.length > 0) {
+        await booksCollection.insertMany(data);
+      }
+
+      res.json({ message: "Sync Berhasil" });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.listen(PORT, () => {
     console.log(`\n╔════════════════════════════════╗`);
     console.log(`║  LibraryOS Server Running      ║`);
