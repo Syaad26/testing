@@ -292,7 +292,12 @@ async function hapusBuku() {
 
     // 3. Panggil sync - PERHATIKAN DISINI
     // Kita panggil /books/sync karena di api.js API_URL sudah ada "/api"
-    await apiCall("/books/sync", "POST", { data: sanitizedData }, { silentError: true });
+    await apiCall(
+      "/books/sync",
+      "POST",
+      { data: sanitizedData },
+      { silentError: true },
+    );
 
     // 4. Update state
     inventaris = sanitizedData;
