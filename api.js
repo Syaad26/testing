@@ -4,7 +4,8 @@
 
 const API_URL = "https://testing-production-298b.up.railway.app/api";
 
-async function apiCall(endpoint, method = "GET", data = null) {
+async function apiCall(endpoint, method = "GET", data = null, config = {}) {
+  const { silentError = false } = config;
   const options = {
     method,
     headers: { "Content-Type": "application/json" },
@@ -43,7 +44,9 @@ async function apiCall(endpoint, method = "GET", data = null) {
     return payload;
   } catch (error) {
     console.error(`API Error (${method} ${endpoint}):`, error.message);
-    showToast(`Error: ${error.message}`);
+    if (!silentError) {
+      showToast(`Error: ${error.message}`);
+    }
     throw error;
   }
 }
