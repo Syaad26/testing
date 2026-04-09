@@ -147,9 +147,29 @@ app.delete("/api/books/:id", async (req, res) => {
     if (result.deletedCount === 0) {
       return res.status(404).json({ error: "Buku tidak ditemukan" });
     }
+
+    // Reindex agar _id tetap berurutan setelah penghapusan.
+    const remaining = await booksCollection
+      .find({ _id: { $type: "number" } })
+      .sort({ _id: 1 })
+      .toArray();
+
+    const addrBase = 0x8a00;
+    const reindexed = remaining.map((book, index) => ({
+      ...book,
+      _id: index + 1,
+      addr: "0x" + (addrBase + index * 0x40).toString(16).toUpperCase(),
+    }));
+
+    await booksCollection.deleteMany({ _id: { $type: "number" } });
+    if (reindexed.length > 0) {
+      await booksCollection.insertMany(reindexed);
+    }
+
     res.json({
-      message: "Buku berhasil dihapus",
+      message: "Buku berhasil dihapus dan ID dirapikan",
       deletedCount: result.deletedCount,
+      totalBooks: reindexed.length,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

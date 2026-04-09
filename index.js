@@ -267,54 +267,16 @@ async function hapusBuku() {
   const targetId = selectedPtr._id;
   if (!confirm(`Hapus "${selectedPtr.judul}"? ID akan disusun ulang.`)) return;
 
-  const fallbackDelete = async () => {
-    // Fallback: tetap hapus data walau endpoint sync belum tersedia di server hosting.
+  try {
     await deleteBook(targetId);
     await loadBooks();
     selectedPtr = null;
-    closeModal();
-    showToast("Buku dihapus (mode fallback tanpa sync ID)");
-  };
-
-  try {
-    // 1. Filter lokal
-    const filtered = inventaris.filter((b) => b._id !== targetId);
-
-    // 2. Re-indexing
-    const sanitizedData = filtered.map((buku, index) => ({
-      _id: index + 1,
-      judul: buku.judul,
-      pengarang: buku.pengarang,
-      stok: buku.stok,
-      cover: buku.cover || "",
-      addr: getAddr(index),
-    }));
-
-    // 3. Panggil sync - PERHATIKAN DISINI
-    // Kita panggil /books/sync karena di api.js API_URL sudah ada "/api"
-    await apiCall(
-      "/books/sync",
-      "POST",
-      { data: sanitizedData },
-      { silentError: true },
-    );
-
-    // 4. Update state
-    inventaris = sanitizedData;
-    idCounter = inventaris.length + 1;
-    selectedPtr = null;
 
     closeModal();
-    render();
-    showToast("Berhasil disinkronkan!");
+    showToast("Buku dihapus, ID sudah dirapikan");
   } catch (error) {
-    console.error("Gagal Sync, mencoba fallback delete:", error);
-    try {
-      await fallbackDelete();
-    } catch (fallbackError) {
-      console.error("Fallback delete gagal:", fallbackError);
-      showToast("Kesalahan sinkronisasi & delete. Cek server logs.");
-    }
+    console.error("Gagal hapus buku:", error);
+    showToast("Gagal hapus data. Cek server logs.");
   }
 }
 
