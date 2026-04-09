@@ -257,6 +257,37 @@ async function updateStok() {
   }
 }
 
+function isDenseSequentialIds(books) {
+  const sorted = [...books].sort((a, b) => a._id - b._id);
+  return sorted.every((book, index) => book._id === index + 1);
+}
+
+async function normalizeIdsViaCrud() {
+  const sorted = [...inventaris].sort((a, b) => a._id - b._id);
+
+  // Hapus dulu semua data yang tersisa.
+  for (const book of [...sorted].sort((a, b) => b._id - a._id)) {
+    await apiCall(`/books/${book._id}`, "DELETE", null, { silentError: true });
+  }
+
+  // Insert ulang berurutan agar _id kembali rapat (1..n).
+  for (const book of sorted) {
+    await apiCall(
+      "/books",
+      "POST",
+      {
+        judul: book.judul,
+        pengarang: book.pengarang,
+        stok: book.stok,
+        cover: book.cover || "",
+      },
+      { silentError: true },
+    );
+  }
+
+  await loadBooks();
+}
+
 // ============================================================
 //  hapusBuku() — menggeser array, update pointer
 // ============================================================
@@ -270,6 +301,13 @@ async function hapusBuku() {
   try {
     await deleteBook(targetId);
     await loadBooks();
+
+    // Jika backend hosting belum support reindex otomatis, rapikan lewat fallback CRUD.
+    if (!isDenseSequentialIds(inventaris)) {
+      showToast("Merapikan ID...");
+      await normalizeIdsViaCrud();
+    }
+
     selectedPtr = null;
 
     closeModal();
