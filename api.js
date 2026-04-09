@@ -16,11 +16,31 @@ async function apiCall(endpoint, method = "GET", data = null) {
 
   try {
     const response = await fetch(`${API_URL}${endpoint}`, options);
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "API Error");
+    const contentType = response.headers.get("content-type") || "";
+    const isJson = contentType.includes("application/json");
+
+    let payload;
+    if (isJson) {
+      payload = await response.json();
+    } else {
+      payload = await response.text();
     }
-    return await response.json();
+
+    if (!response.ok) {
+      const errorMessage =
+        isJson && payload && payload.error
+          ? payload.error
+          : `HTTP ${response.status} ${response.statusText}`;
+      throw new Error(errorMessage);
+    }
+
+    if (!isJson) {
+      throw new Error(
+        `API mengembalikan format non-JSON (${response.status}). Cek endpoint/back-end deploy.`,
+      );
+    }
+
+    return payload;
   } catch (error) {
     console.error(`API Error (${method} ${endpoint}):`, error.message);
     showToast(`Error: ${error.message}`);
