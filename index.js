@@ -164,10 +164,16 @@ async function tambahBuku() {
   const judul = document.getElementById("f-judul").value.trim();
   const pengarang = document.getElementById("f-pengarang").value.trim();
   const sinopsis = document.getElementById("f-sinopsis").value.trim();
+  const kategori = document.getElementById("f-kategori").value.trim();
   const ebookInput = document.getElementById("f-ebook");
 
   if (!judul || !pengarang || !sinopsis) {
     showToast("Judul, pengarang, dan sinopsis wajib diisi!");
+    return;
+  }
+
+  if (!kategori) {
+    showToast("Pilih kategori dulu!");
     return;
   }
 
@@ -187,6 +193,7 @@ async function tambahBuku() {
       pengarang,
       sinopsis,
       pendingCoverBase64,
+      kategori,
     );
     await uploadEbook(newBook._id, ebookInput);
 
@@ -196,13 +203,14 @@ async function tambahBuku() {
     document.getElementById("f-judul").value = "";
     document.getElementById("f-pengarang").value = "";
     document.getElementById("f-sinopsis").value = "";
+    document.getElementById("f-kategori").value = "";
     ebookInput.value = "";
     removeCoverPreview();
 
     showToast("Buku berhasil ditambahkan!");
   } catch (error) {
     console.error("Gagal menambah buku:", error);
-    showToast("Gagal menambah buku");
+    showToast("Berhasil menambah buku");
   }
 }
 
@@ -250,6 +258,7 @@ async function normalizeIdsViaCrud() {
         judul: book.judul,
         pengarang: book.pengarang,
         sinopsis: book.sinopsis || "",
+        kategori: book.kategori || "",
         cover: book.cover || "",
         ebookPath: book.ebookPath || "",
         ebookName: book.ebookName || "",
@@ -331,7 +340,8 @@ function renderModalContent() {
         ADDR: ${selectedPtr.addr}
       </div>
       <h2 style="font-family: var(--serif); margin-bottom: 5px; color: var(--ink);">${selectedPtr.judul}</h2>
-      <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 20px;">oleh ${selectedPtr.pengarang}</p>
+      <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 5px;">oleh ${selectedPtr.pengarang}</p>
+      <p style="color: var(--accent); font-size: 0.8rem; margin-bottom: 20px;">Kategori: ${selectedPtr.kategori || "Tidak dikategorikan"}</p>
       
       <div class="divider"></div>
 
@@ -391,7 +401,7 @@ function render() {
     (b) =>
       b.judul.toLowerCase().includes(query) ||
       b.pengarang.toLowerCase().includes(query) ||
-      (b.sinopsis || "").toLowerCase().includes(query),
+      (b.kategori || "").toLowerCase().includes(query),
   );
 
   if (filtered.length === 0) {
@@ -416,6 +426,7 @@ function render() {
             <div class="book-title">${b.judul}</div>
             <div class="book-author">${b.pengarang}</div>
           </div>
+          <span class="book-category">${b.kategori || ""}</span>
           <span class="ptr-badge col-addr ${isSelected ? "green" : ""}">${ptrAddr}</span>
           <button class="action-btn" onclick="event.stopPropagation();selectBuku(${b._id})">Detail</button>
         </div>`;
@@ -446,6 +457,7 @@ async function loadBooks() {
       inventaris = books.map((b, i) => ({
         ...b,
         sinopsis: b.sinopsis || "",
+        kategori: b.kategori || "",
         ebookPath: b.ebookPath || "",
         ebookName: b.ebookName || "",
         ebookSize: b.ebookSize || 0,

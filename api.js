@@ -2,7 +2,11 @@
 //  API CLIENT — komunikasi dengan backend server
 // ============================================================
 
-const API_URL = "https://testing-production-298b.up.railway.app/api";
+const API_URL =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:3000/api"
+    : "https://testing-production-298b.up.railway.app/api";
 
 async function apiCall(endpoint, method = "GET", data = null, config = {}) {
   const { silentError = false } = config;
@@ -63,8 +67,8 @@ async function getBook(id) {
 }
 
 // POST tambah buku
-async function addBook(judul, pengarang, sinopsis, cover = "") {
-  return apiCall("/books", "POST", { judul, pengarang, sinopsis, cover });
+async function addBook(judul, pengarang, sinopsis, cover = "", kategori = "") {
+  return apiCall("/books", "POST", { judul, pengarang, sinopsis, cover, kategori });
 }
 
 // DELETE hapus buku

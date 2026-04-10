@@ -85,15 +85,15 @@ async function connectDB() {
 app.get("/api/books", async (req, res) => {
   try {
     const { search } = req.query;
-    let query = { _id: { $type: "number" } };
+    let query = {};
 
     if (search) {
       query = {
-        _id: { $type: "number" },
         $or: [
           { judul: { $regex: search, $options: "i" } },
           { pengarang: { $regex: search, $options: "i" } },
           { sinopsis: { $regex: search, $options: "i" } },
+          { kategori: { $regex: search, $options: "i" } },
         ],
       };
     }
@@ -128,6 +128,7 @@ app.post("/api/books", async (req, res) => {
       judul,
       pengarang,
       sinopsis,
+      kategori,
       cover,
       gambar,
       ebookPath,
@@ -156,6 +157,7 @@ app.post("/api/books", async (req, res) => {
       judul,
       pengarang,
       sinopsis,
+      kategori: kategori || "",
       addr,
       cover: cover || gambar || "",
       ebookPath: ebookPath || "",
