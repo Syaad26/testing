@@ -56,6 +56,20 @@ function deleteEbookFileIfExists(storedPath) {
   return true;
 }
 
+async function clearEbookMetadata(bookId) {
+  return booksCollection.updateOne(
+    { _id: bookId },
+    {
+      $set: {
+        ebookPath: "",
+        ebookName: "",
+        ebookSize: 0,
+        ebookUploadedAt: null,
+      },
+    },
+  );
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
@@ -448,6 +462,17 @@ async function start() {
           `Ebook file tidak ditemukan untuk book #${bookId}. Candidates:`,
           candidates,
         );
+
+        // Sinkronkan metadata agar record tidak terus menunjuk file yang hilang.
+        try {
+          await clearEbookMetadata(bookId);
+        } catch (syncError) {
+          console.warn(
+            `Gagal sinkron metadata ebook untuk book #${bookId}:`,
+            syncError.message,
+          );
+        }
+
         return res
           .status(404)
           .json({ error: "File ebook hilang dari storage" });
