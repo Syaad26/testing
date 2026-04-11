@@ -9,9 +9,51 @@ const path = require("path");
 // ============================================================
 //  FILE UPLOAD CONFIG - Multer untuk ebook
 // ============================================================
-const uploadsDir = path.join(__dirname, "uploads");
+function resolveStorageRoot(inputPath) {
+  if (!inputPath) return path.join(__dirname, "uploads");
+  return path.isAbsolute(inputPath)
+    ? inputPath
+    : path.resolve(__dirname, inputPath);
+}
+
+const uploadsDir = resolveStorageRoot(process.env.EBOOK_STORAGE_PATH);
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+function getEbookPathCandidates(storedPath) {
+  if (!storedPath || typeof storedPath !== "string") return [];
+
+  const normalized = storedPath.replace(/\\/g, "/").trim();
+  if (!normalized) return [];
+
+  const candidates = [];
+  if (path.isAbsolute(normalized)) {
+    candidates.push(normalized);
+  }
+
+  // Primary: file disimpan di volume path saat ini.
+  candidates.push(path.join(uploadsDir, path.basename(normalized)));
+
+  // Legacy: data lama menyimpan format "uploads/<filename>" relatif project.
+  candidates.push(path.resolve(__dirname, normalized));
+
+  return [...new Set(candidates)];
+}
+
+function resolveExistingEbookPath(storedPath) {
+  const candidates = getEbookPathCandidates(storedPath);
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function deleteEbookFileIfExists(storedPath) {
+  const resolvedPath = resolveExistingEbookPath(storedPath);
+  if (!resolvedPath) return false;
+  fs.unlinkSync(resolvedPath);
+  return true;
 }
 
 const storage = multer.diskStorage({
@@ -178,9 +220,20 @@ app.post("/api/books", async (req, res) => {
 app.delete("/api/books/:id", async (req, res) => {
   try {
     const bookId = parseInt(req.params.id, 10);
-    const result = await booksCollection.deleteOne({ _id: bookId });
-    if (result.deletedCount === 0) {
+
+    const bookToDelete = await booksCollection.findOne({ _id: bookId });
+    if (!bookToDelete) {
       return res.status(404).json({ error: "Buku tidak ditemukan" });
+    }
+
+    const result = await booksCollection.deleteOne({ _id: bookId });
+
+    try {
+      if (bookToDelete.ebookPath) {
+        deleteEbookFileIfExists(bookToDelete.ebookPath);
+      }
+    } catch (fileError) {
+      console.warn("Gagal menghapus file ebook:", fileError.message);
     }
 
     // Reindex agar _id tetap berurutan setelah penghapusan.
@@ -323,8 +376,14 @@ async function start() {
       }
 
       const bookId = parseInt(req.params.id, 10);
-      const filePath = `uploads/${req.file.filename}`;
+      const filePath = req.file.filename;
       const fileSize = req.file.size;
+
+      const existingBook = await booksCollection.findOne({ _id: bookId });
+      if (!existingBook) {
+        fs.unlinkSync(req.file.path); // Hapus file jika book tidak ditemukan
+        return res.status(404).json({ error: "Buku tidak ditemukan" });
+      }
 
       const updateRes = await booksCollection.updateOne(
         { _id: bookId },
@@ -338,9 +397,18 @@ async function start() {
         },
       );
 
-      if (updateRes.matchedCount === 0) {
-        fs.unlinkSync(req.file.path); // Hapus file jika book tidak ditemukan
-        return res.status(404).json({ error: "Buku tidak ditemukan" });
+      if (updateRes.matchedCount === 0 || updateRes.modifiedCount === 0) {
+        return res
+          .status(500)
+          .json({ error: "Gagal menyimpan metadata ebook" });
+      }
+
+      try {
+        if (existingBook.ebookPath) {
+          deleteEbookFileIfExists(existingBook.ebookPath);
+        }
+      } catch (fileError) {
+        console.warn("Gagal menghapus file ebook lama:", fileError.message);
       }
 
       console.log(
@@ -371,10 +439,15 @@ async function start() {
           .json({ error: "Ebook tidak ditemukan untuk buku ini" });
       }
 
-      const resolvedPath = path.resolve(__dirname, book.ebookPath);
+      const resolvedPath = resolveExistingEbookPath(book.ebookPath);
 
       // Cek file exists
-      if (!fs.existsSync(resolvedPath)) {
+      if (!resolvedPath) {
+        const candidates = getEbookPathCandidates(book.ebookPath);
+        console.warn(
+          `Ebook file tidak ditemukan untuk book #${bookId}. Candidates:`,
+          candidates,
+        );
         return res
           .status(404)
           .json({ error: "File ebook hilang dari storage" });
@@ -392,6 +465,7 @@ async function start() {
     console.log(`║  LibraryOS Server Running      ║`);
     console.log(`║  Port: ${PORT}                         ║`);
     console.log(`║  DB: ${DB_NAME}               ║`);
+    console.log(`║  Ebook storage: ${uploadsDir} ║`);
     console.log(`║  http://localhost:${PORT}            ║`);
     console.log(`╚════════════════════════════════╝\n`);
   });
